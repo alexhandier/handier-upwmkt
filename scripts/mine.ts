@@ -57,7 +57,10 @@ const FILTER_MINER_NAME = process.argv[2] || null;
 // --- Hardcoded rules (Stage 0) ---
 const RULES = {
   maxApplicants: 50,
+  maxAgeDays: 14,
+  minHourlyRate: 30,
   excludeKeywords: ["data entry", "virtual assistant", "transcription", "copy paste"],
+  excludeLanguages: ["french", "german", "portuguese", "italian", "arabic", "mandarin", "chinese", "japanese", "korean", "hindi", "russian", "dutch", "turkish", "polish", "swedish", "norwegian", "danish", "finnish", "greek", "hebrew", "thai", "vietnamese", "indonesian", "malay", "tagalog", "filipino"],
 };
 
 // --- Airtable helpers ---
@@ -287,7 +290,34 @@ function applyRules(job: any): { passed: boolean; reason?: string } {
   if (job.totalApplicants > RULES.maxApplicants) {
     return { passed: false, reason: `${job.totalApplicants} applicants` };
   }
-  const text = `${job.title} ${job.description}`.toLowerCase();
+
+  // Age check: discard if older than 14 days
+  if (job.createdDateTime) {
+    const postedAt = new Date(job.createdDateTime).getTime();
+    const ageMs = Date.now() - postedAt;
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    if (ageDays > RULES.maxAgeDays) {
+      return { passed: false, reason: `Too old: ${Math.round(ageDays)} days` };
+    }
+  }
+
+  // Hourly rate floor: discard if max hourly is below $30
+  if (job.hourlyBudgetMax) {
+    const maxRate = parseFloat(job.hourlyBudgetMax.displayValue?.replace(/[^0-9.]/g, "") || "0");
+    if (maxRate > 0 && maxRate < RULES.minHourlyRate) {
+      return { passed: false, reason: `Low rate: $${maxRate}/hr (min $${RULES.minHourlyRate})` };
+    }
+  }
+
+  const text = `${job.title} ${job.description} ${job.skills?.map((s: any) => s.prettyName).join(" ") || ""}`.toLowerCase();
+
+  // Language check: discard if requires non-English/Spanish languages
+  for (const lang of RULES.excludeLanguages) {
+    if (text.includes(lang)) {
+      return { passed: false, reason: `Language: "${lang}"` };
+    }
+  }
+
   for (const kw of RULES.excludeKeywords) {
     if (text.includes(kw.toLowerCase())) {
       return { passed: false, reason: `Keyword: "${kw}"` };

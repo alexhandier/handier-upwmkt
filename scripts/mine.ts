@@ -414,6 +414,8 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
   // Fetch
   const jobs = await fetchJobs(accessToken, miner.searchExpression, miner.maxPages);
   const newJobs = jobs.filter(j => !existingIds.has(j.id));
+  // Mark all fetched jobs as seen immediately to prevent cross-miner dupes
+  for (const j of newJobs) existingIds.add(j.id);
   console.log(`    Fetched ${jobs.length}, new: ${newJobs.length}`);
 
   if (newJobs.length === 0) return 0;
@@ -467,7 +469,6 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
         appendFileSync(REJECTED_PATH, JSON.stringify({ id: job.id, title: job.title, miner: miner.name, stage: "deep", score: result.score, reason: result.reason, ts: new Date().toISOString() }) + "\n");
       } else {
         passing.push(toAirtableFields(job, miner, result.score, result.reason, "stage2_deep"));
-        existingIds.add(job.id);
       }
     }
   } else {
@@ -477,7 +478,6 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
         appendFileSync(REJECTED_PATH, JSON.stringify({ id: job.id, title: job.title, miner: miner.name, stage: "superficial_floor", score: supResult.score, reason: supResult.reason, ts: new Date().toISOString() }) + "\n");
       } else {
         passing.push(toAirtableFields(job, miner, supResult.score, supResult.reason, "stage1_superficial"));
-        existingIds.add(job.id);
       }
     }
   }
@@ -628,12 +628,11 @@ async function main() {
   }
   console.log(`  ${dueMiners.length} miner(s) due to run\n`);
 
-  // Run due miners in parallel
+  // Run due miners sequentially (shared existingIds prevents cross-miner dupes)
   let totalPassed = 0;
-  const minerResults = await Promise.all(
-    dueMiners.map(miner => runMiner(miner, accessToken, existingIds))
-  );
-  totalPassed = minerResults.reduce((sum, n) => sum + n, 0);
+  for (const miner of dueMiners) {
+    totalPassed += await runMiner(miner, accessToken, existingIds);
+  }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`\n${"=".repeat(40)}`);

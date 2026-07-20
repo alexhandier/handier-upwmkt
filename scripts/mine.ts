@@ -595,6 +595,20 @@ async function main() {
   }
   console.log(`  ${existingIds.size} existing jobs in Airtable`);
 
+  // Pipeline limiter: pause if too many unprocessed jobs
+  const MAX_UNPROCESSED = 500;
+  const unprocessedRecords = await airtableGet("Jobs", {
+    filterByFormula: "{Status}='New Jobs'",
+    "fields[]": "Title",
+  });
+  const unprocessedCount = unprocessedRecords.length;
+  console.log(`  Unprocessed jobs (New Jobs): ${unprocessedCount}/${MAX_UNPROCESSED}`);
+
+  if (unprocessedCount >= MAX_UNPROCESSED) {
+    console.log(`\n  PAUSED — ${unprocessedCount} unprocessed jobs in pipeline (limit: ${MAX_UNPROCESSED}).`);
+    console.log(`  Filter/triage existing jobs before miners will run again.\n`);
+    return;
+  }
   // Filter miners that are due to run based on their interval
   const now = Date.now();
   const dueMiners = miners.filter(miner => {

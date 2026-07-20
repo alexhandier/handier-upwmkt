@@ -34,6 +34,13 @@ function loadEnv() {
 }
 loadEnv();
 
+process.on("uncaughtException", (err) => {
+  console.error("[server] Uncaught exception (not crashing):", err.message);
+});
+process.on("unhandledRejection", (err: any) => {
+  console.error("[server] Unhandled rejection (not crashing):", err?.message || err);
+});
+
 const PORT = parseInt(process.env.PORT || "8080", 10);
 const DATA_DIR = process.env.DATA_DIR || resolve(process.cwd(), "data");
 const TOKENS_PATH = resolve(DATA_DIR, "tokens.json");
@@ -170,7 +177,7 @@ const server = createServer(async (req, res) => {
 
 // --- Cron: run miner on interval ---
 
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 
 const CRON_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 let lastMineRun: string | null = null;
@@ -186,19 +193,36 @@ function triggerMine() {
   lastMineRun = new Date().toISOString();
   console.log(`[cron] Starting mine run at ${lastMineRun}`);
 
-  const child = execFile("npx", ["tsx", "scripts/mine.ts"], {
+  const child = spawn("node", ["--import", "tsx", "scripts/mine.ts"], {
     cwd: process.cwd(),
     env: process.env as NodeJS.ProcessEnv,
-    maxBuffer: 10 * 1024 * 1024,
-  }, (err, stdout, stderr) => {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+
+  child.stdout.on("data", (data) => { stdout += data.toString(); });
+  child.stderr.on("data", (data) => { stderr += data.toString(); });
+
+  child.on("error", (err) => {
     mineRunning = false;
-    if (err) {
-      console.error(`[cron] Mine failed:`, err.message);
-      if (stderr) console.error(stderr);
-    } else {
+    console.error(`[cron] Failed to start mine process:`, err.message);
+  });
+
+  child.on("close", (code) => {
+    mineRunning = false;
+    if (code === 0) {
       console.log(`[cron] Mine completed successfully`);
+    } else {
+      console.error(`[cron] Mine exited with code ${code}`);
+      if (stderr) console.error(`[cron] stderr: ${stderr.slice(-2000)}`);
     }
-    if (stdout) console.log(stdout);
+    if (stdout) {
+      const lines = stdout.trim().split("\n");
+      const summary = lines.slice(-5).join("\n");
+      console.log(`[cron] output (last 5 lines):\n${summary}`);
+    }
   });
 }
 

@@ -1,6 +1,6 @@
 import {useState, useMemo, useCallback} from 'react';
 import {expandRecord, useGlobalConfig} from '@airtable/blocks/interface/ui';
-import {Lightning, LightningSlash, Trash, Plus, ArrowSquareOut, CaretDown, CaretRight, Key, Warning} from '@phosphor-icons/react';
+import {Lightning, LightningSlash, Trash, Plus, ArrowSquareOut, CaretDown, CaretRight, Key, Warning, Play} from '@phosphor-icons/react';
 import {MINER_FIELDS, PROMPT_FIELDS} from '../lib/fields';
 import {formatTimeAgo} from '../lib/hooks';
 import {safeGetString, safeGetValue, hasField} from '../lib/safe';
@@ -18,6 +18,7 @@ export default function Miners({minersTable, minerRecords, promptsTable, promptR
 
     const globalConfig = useGlobalConfig();
     const authUrl = globalConfig.get('authServiceUrl');
+    const minerServiceUrl = globalConfig.get('minerServiceUrl');
 
     const runStale = useMemo(() => {
         if (!minerRecords || minerRecords.length === 0) return false;
@@ -105,6 +106,7 @@ export default function Miners({minersTable, minerRecords, promptsTable, promptR
                         table={minersTable}
                         records={minerRecords}
                         promptRecords={promptRecords}
+                        minerServiceUrl={minerServiceUrl}
                         expandedId={expandedMinerId}
                         onToggleExpand={id => setExpandedMinerId(expandedMinerId === id ? null : id)}
                         creating={creatingMiner}
@@ -191,7 +193,7 @@ function CreateMinerForm({table, onCancel}) {
 // Miners List
 // ============================================================
 
-function MinersList({table, records, promptRecords, expandedId, onToggleExpand, creating, onCancelCreate, onDeleteRequest}) {
+function MinersList({table, records, promptRecords, minerServiceUrl, expandedId, onToggleExpand, creating, onCancelCreate, onDeleteRequest}) {
     const promptMap = useMemo(() => {
         const m = new Map();
         if (promptRecords) promptRecords.forEach(r => m.set(r.id, r));
@@ -227,6 +229,7 @@ function MinersList({table, records, promptRecords, expandedId, onToggleExpand, 
                     record={record}
                     promptMap={promptMap}
                     promptRecords={promptRecords}
+                    minerServiceUrl={minerServiceUrl}
                     expanded={expandedId === record.id}
                     onToggleExpand={() => onToggleExpand(record.id)}
                     onToggleActive={() => toggleActive(record)}
@@ -242,7 +245,7 @@ function MinersList({table, records, promptRecords, expandedId, onToggleExpand, 
 // Miner Card
 // ============================================================
 
-function MinerCard({record, promptMap, promptRecords, expanded, onToggleExpand, onToggleActive, onUpdate, onDelete}) {
+function MinerCard({record, promptMap, promptRecords, minerServiceUrl, expanded, onToggleExpand, onToggleActive, onUpdate, onDelete}) {
     const name = safeGetString(record, MINER_FIELDS.NAME);
     const searchUrl = safeGetString(record, MINER_FIELDS.SEARCH_URL);
     const searchDesc = safeGetString(record, MINER_FIELDS.SEARCH_DESCRIPTION);
@@ -280,6 +283,14 @@ function MinerCard({record, promptMap, promptRecords, expanded, onToggleExpand, 
                 </button>
 
                 <div className="flex items-center gap-1 shrink-0">
+                    <button
+                        onClick={() => minerServiceUrl && window.open(`${minerServiceUrl}/run/${record.id}`, '_blank')}
+                        disabled={!minerServiceUrl}
+                        className={`p-1.5 transition-colors ${minerServiceUrl ? 'text-gray-gray300 hover:text-green-green dark:text-gray-gray500 dark:hover:text-green-greenLight1' : 'text-gray-gray200 dark:text-gray-gray700 cursor-not-allowed'}`}
+                        title={minerServiceUrl ? 'Run now' : 'Miner service URL not configured'}
+                    >
+                        <Play size={14} weight="fill" />
+                    </button>
                     {searchUrl && (
                         <a href={searchUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-gray300 hover:text-gray-gray500 dark:text-gray-gray500 dark:hover:text-gray-gray300 transition-colors" title="Open on Upwork">
                             <ArrowSquareOut size={14} />

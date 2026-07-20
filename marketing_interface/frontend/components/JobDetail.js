@@ -23,6 +23,7 @@ export default function JobDetail({record, table, onQualify, onDiscard, onPriori
     const coverLetter = record.getCellValueAsString(JOB_FIELDS.COVER_LETTER);
     const connectsCost = record.getCellValue(JOB_FIELDS.CONNECTS_COST);
     const discardComment = record.getCellValueAsString(JOB_FIELDS.COMMENTS);
+    const searchLabel = record.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL);
 
     const isActionable = status === STATUSES.NEW_JOBS;
 

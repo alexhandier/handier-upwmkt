@@ -120,6 +120,8 @@ interface MinerConfig {
   searchDescription: string;
   ourOffering: string;
   maxPages: number;
+  runIntervalMinutes: number;
+  lastRun: string | null;
   superficialPrompt: PromptConfig | null;
   deepPrompt: PromptConfig | null;
 }
@@ -158,6 +160,8 @@ async function loadMiners(): Promise<MinerConfig[]> {
       searchDescription: rec.fields["Search Description"] || "",
       ourOffering: rec.fields["Our Offering"] || "",
       maxPages: rec.fields["Max Pages"] || 3,
+      runIntervalMinutes: parseInt(rec.fields["Run Interval"] || "10", 10) || 10,
+      lastRun: rec.fields["Last Run"] || null,
       superficialPrompt: superficialIds[0] ? promptsById.get(superficialIds[0]) || null : null,
       deepPrompt: deepIds[0] ? promptsById.get(deepIds[0]) || null : null,
     };
@@ -582,10 +586,29 @@ async function main() {
   }
   console.log(`  ${existingIds.size} existing jobs in Airtable`);
 
-  // Run miners in parallel
+  // Filter miners that are due to run based on their interval
+  const now = Date.now();
+  const dueMiners = miners.filter(miner => {
+    if (!miner.lastRun) return true;
+    const lastRunMs = new Date(miner.lastRun).getTime();
+    const elapsedMin = (now - lastRunMs) / 60_000;
+    if (elapsedMin < miner.runIntervalMinutes) {
+      console.log(`  [${miner.name}] SKIP — ran ${Math.round(elapsedMin)}m ago, interval is ${miner.runIntervalMinutes}m`);
+      return false;
+    }
+    return true;
+  });
+
+  if (dueMiners.length === 0) {
+    console.log("\n  No miners due to run. Done.");
+    return;
+  }
+  console.log(`  ${dueMiners.length} miner(s) due to run\n`);
+
+  // Run due miners in parallel
   let totalPassed = 0;
   const minerResults = await Promise.all(
-    miners.map(miner => runMiner(miner, accessToken, existingIds))
+    dueMiners.map(miner => runMiner(miner, accessToken, existingIds))
   );
   totalPassed = minerResults.reduce((sum, n) => sum + n, 0);
 

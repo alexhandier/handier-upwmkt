@@ -147,7 +147,20 @@ const server = createServer(async (req, res) => {
       timestamp: new Date().toISOString(),
       tokens: tokenStatus,
       data_dir: DATA_DIR,
+      cron: { interval_ms: CRON_INTERVAL_MS, last_run: lastMineRun, running: mineRunning },
     }, null, 2));
+    return;
+  }
+
+  if (url.pathname === "/run") {
+    if (mineRunning) {
+      res.writeHead(409, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "mine already running", started: lastMineRun }));
+      return;
+    }
+    triggerMine();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "started", timestamp: new Date().toISOString() }));
     return;
   }
 
@@ -155,9 +168,50 @@ const server = createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "not found" }));
 });
 
+// --- Cron: run miner on interval ---
+
+import { execFile } from "node:child_process";
+
+const CRON_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+let lastMineRun: string | null = null;
+let mineRunning = false;
+
+function triggerMine() {
+  if (mineRunning) return;
+  if (!existsSync(TOKENS_PATH)) {
+    console.log("[cron] Skipping — no tokens yet (needs auth)");
+    return;
+  }
+  mineRunning = true;
+  lastMineRun = new Date().toISOString();
+  console.log(`[cron] Starting mine run at ${lastMineRun}`);
+
+  const child = execFile("npx", ["tsx", "scripts/mine.ts"], {
+    cwd: process.cwd(),
+    env: process.env as NodeJS.ProcessEnv,
+    maxBuffer: 10 * 1024 * 1024,
+  }, (err, stdout, stderr) => {
+    mineRunning = false;
+    if (err) {
+      console.error(`[cron] Mine failed:`, err.message);
+      if (stderr) console.error(stderr);
+    } else {
+      console.log(`[cron] Mine completed successfully`);
+    }
+    if (stdout) console.log(stdout);
+  });
+}
+
+// Start cron timer
+setInterval(triggerMine, CRON_INTERVAL_MS);
+
+// Run once on startup (after a short delay to let the server settle)
+setTimeout(triggerMine, 5000);
+
 server.listen(PORT, () => {
   console.log(`[server] Listening on port ${PORT}`);
   console.log(`[server] Auth URL: ${REDIRECT_URI.replace("/auth/callback", "/auth")}`);
   console.log(`[server] Data dir: ${DATA_DIR}`);
   console.log(`[server] Tokens: ${existsSync(TOKENS_PATH) ? "found" : "not found (needs auth)"}`);
+  console.log(`[server] Cron: every ${CRON_INTERVAL_MS / 60000} min`);
 });

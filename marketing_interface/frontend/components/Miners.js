@@ -251,6 +251,7 @@ function MinerCard({record, promptMap, promptRecords, expanded, onToggleExpand, 
     const lastRun = safeGetString(record, MINER_FIELDS.LAST_RUN);
     const jobsFound = safeGetValue(record, MINER_FIELDS.LAST_RUN_JOBS_FOUND);
     const maxPages = safeGetValue(record, MINER_FIELDS.MAX_PAGES);
+    const runInterval = safeGetValue(record, MINER_FIELDS.RUN_INTERVAL);
     const superficialLinks = safeGetValue(record, MINER_FIELDS.SUPERFICIAL_PROMPT);
     const deepLinks = safeGetValue(record, MINER_FIELDS.DEEP_PROMPT);
 
@@ -270,6 +271,7 @@ function MinerCard({record, promptMap, promptRecords, expanded, onToggleExpand, 
                         <span className="text-sm font-medium truncate">{name || 'Untitled'}</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-gray-gray400 dark:text-gray-gray500 mt-0.5 ml-5">
+                        {runInterval != null && <span>Every {runInterval}m</span>}
                         {sName && <span>S: {sName}</span>}
                         {dName && <span>D: {dName}</span>}
                         {lastRun && <span>Last: {formatTimeAgo(lastRun)}</span>}
@@ -308,9 +310,14 @@ function MinerCard({record, promptMap, promptRecords, expanded, onToggleExpand, 
                             <PromptPicker current={deepLinks} promptRecords={promptRecords} filterType="Deep" onSelect={id => onUpdate(MINER_FIELDS.DEEP_PROMPT, id ? [{id}] : null)} />
                         </Field>
                     </div>
-                    <Field label="Max Pages">
-                        <EditableText value={maxPages != null ? String(maxPages) : ''} placeholder="3" onSave={v => onUpdate(MINER_FIELDS.MAX_PAGES, v ? Number(v) : null)} />
-                    </Field>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Field label="Run every (minutes)">
+                            <EditableText value={runInterval != null ? String(runInterval) : ''} placeholder="60" onSave={v => onUpdate(MINER_FIELDS.RUN_INTERVAL, v ? Number(v) : null)} />
+                        </Field>
+                        <Field label="Max Pages">
+                            <EditableText value={maxPages != null ? String(maxPages) : ''} placeholder="3" onSave={v => onUpdate(MINER_FIELDS.MAX_PAGES, v ? Number(v) : null)} />
+                        </Field>
+                    </div>
                 </div>
             )}
         </div>

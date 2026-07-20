@@ -304,6 +304,7 @@ function SwipeableJobRow({record, selected, isRead, onClick, onQualify, onDiscar
     const summary = record.getCellValueAsString(JOB_FIELDS.SUMMARY);
     const priority = record.getCellValueAsString(JOB_FIELDS.PRIORITY);
     const status = record.getCellValueAsString(JOB_FIELDS.STATUS);
+    const searchLabel = record.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL);
     const isNew = status === STATUSES.NEW_JOBS && !isRead;
     const isDiscarded = status === STATUSES.DISCARDED;
 
@@ -367,6 +368,7 @@ function SwipeableJobRow({record, selected, isRead, onClick, onQualify, onDiscar
                             {summary}
                         </p>
                         <div className="flex items-center gap-2 mt-1 text-xs text-gray-gray300 dark:text-gray-gray500">
+                            {searchLabel && <span className="text-gray-gray400 dark:text-gray-gray500">{searchLabel}</span>}
                             {budget && <span>{budget}</span>}
                             {country && <span>{country}</span>}
                             {posted && <span>{formatTimeAgo(posted)}</span>}

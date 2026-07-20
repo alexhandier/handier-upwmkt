@@ -453,6 +453,7 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
   // Stage 2: Deep — parallel batches (only survivors)
   const passing: Record<string, any>[] = [];
   let rejDeep = 0;
+  const MIN_SCORE_TO_PUSH = 6;
 
   if (miner.deepPrompt && afterSuperficial.length > 0) {
     const deepResults = await runBatch(afterSuperficial, async ({ job }) => {
@@ -461,7 +462,7 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
     });
 
     for (const { job, result } of deepResults) {
-      if (result.score < miner.deepPrompt.threshold) {
+      if (result.score < MIN_SCORE_TO_PUSH) {
         rejDeep++;
         appendFileSync(REJECTED_PATH, JSON.stringify({ id: job.id, title: job.title, miner: miner.name, stage: "deep", score: result.score, reason: result.reason, ts: new Date().toISOString() }) + "\n");
       } else {
@@ -471,12 +472,17 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
     }
   } else {
     for (const { job, supResult } of afterSuperficial) {
-      passing.push(toAirtableFields(job, miner, supResult.score, supResult.reason, "stage1_superficial"));
-      existingIds.add(job.id);
+      if (supResult.score < MIN_SCORE_TO_PUSH) {
+        rejDeep++;
+        appendFileSync(REJECTED_PATH, JSON.stringify({ id: job.id, title: job.title, miner: miner.name, stage: "superficial_floor", score: supResult.score, reason: supResult.reason, ts: new Date().toISOString() }) + "\n");
+      } else {
+        passing.push(toAirtableFields(job, miner, supResult.score, supResult.reason, "stage1_superficial"));
+        existingIds.add(job.id);
+      }
     }
   }
 
-  console.log(`    After deep: ${passing.length} passed (${rejDeep} rejected)`);
+  console.log(`    After deep: ${passing.length} passed (${rejDeep} rejected, min score=${MIN_SCORE_TO_PUSH})`);
 
   // Push to Airtable
   if (passing.length > 0) {

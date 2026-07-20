@@ -1,0 +1,24 @@
+{
+  "name": "handier-upwmkt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx scripts/server.ts",
+    "server": "tsx scripts/server.ts",
+    "auth": "tsx scripts/auth.ts",
+    "mine": "tsx scripts/mine.ts",
+    "archive": "tsx scripts/archive.ts",
+    "test:auth": "tsx scripts/test-upwork-auth.ts",
+    "test:filter": "tsx scripts/test-filter.ts",
+    "test:pipeline": "tsx scripts/test-pipeline.ts"
+  },
+  "dependencies": {
+    "openai": "^4",
+    "tsx": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5"
+  }
+}

@@ -87,7 +87,12 @@ export default function JobDetail({record, table, onQualify, onDiscard, onPriori
             </div>
 
             {/* Title + meta */}
-            <h2 className="text-sm font-semibold leading-tight mb-1.5">{title}</h2>
+            <div className="flex items-center gap-2 mb-1.5">
+                <h2 className="text-sm font-semibold leading-tight">{title}</h2>
+                {searchLabel && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-gray75 dark:bg-gray-gray700 text-gray-gray500 dark:text-gray-gray400 shrink-0">{searchLabel}</span>
+                )}
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-gray400 dark:text-gray-gray500 mb-3">
                 {aiScore != null && (
                     <span className={`font-medium ${aiScore >= 7 ? 'text-green-green' : aiScore >= 4 ? 'text-yellow-yellowDark1' : 'text-gray-gray400'}`}>

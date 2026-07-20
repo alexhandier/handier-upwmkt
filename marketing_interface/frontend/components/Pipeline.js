@@ -257,6 +257,7 @@ function PipelineRow({record, selected, onClick}) {
     const country = record.getCellValueAsString(JOB_FIELDS.CLIENT_COUNTRY);
     const score = record.getCellValue(JOB_FIELDS.AI_SCORE);
     const summary = record.getCellValueAsString(JOB_FIELDS.SUMMARY);
+    const searchLabel = record.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL);
 
     return (
         <button
@@ -279,6 +280,7 @@ function PipelineRow({record, selected, onClick}) {
                 <p className="text-xs text-gray-gray400 dark:text-gray-gray500 truncate mt-0.5">{summary}</p>
             )}
             <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-gray300 dark:text-gray-gray500">
+                {searchLabel && <span>{searchLabel}</span>}
                 {budget && <span>{budget}</span>}
                 {country && <span>{country}</span>}
                 {score != null && (
@@ -310,6 +312,7 @@ function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCo
     const coverLetter = record.getCellValueAsString(JOB_FIELDS.COVER_LETTER);
     const connectsCost = record.getCellValue(JOB_FIELDS.CONNECTS_COST);
     const discardComment = record.getCellValueAsString(JOB_FIELDS.COMMENTS);
+    const searchLabel = record.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL);
 
     const nextStages = STAGE_ORDER.filter(s => s !== status && s !== 'Discarded');
 
@@ -371,7 +374,12 @@ function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCo
             </div>
 
             {/* Title + meta */}
-            <h2 className="text-sm font-semibold leading-tight mb-1.5">{title}</h2>
+            <div className="flex items-center gap-2 mb-1.5">
+                <h2 className="text-sm font-semibold leading-tight">{title}</h2>
+                {searchLabel && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-gray75 dark:bg-gray-gray700 text-gray-gray500 dark:text-gray-gray400 shrink-0">{searchLabel}</span>
+                )}
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-gray400 dark:text-gray-gray500 mb-3">
                 {aiScore != null && (
                     <span className={`font-medium ${aiScore >= 7 ? 'text-green-green' : aiScore >= 4 ? 'text-yellow-yellowDark1' : 'text-gray-gray400'}`}>

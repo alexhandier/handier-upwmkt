@@ -319,6 +319,8 @@ function formatJobFields(job: any, fieldsToCheck: string[]): string {
   return lines.join("\n");
 }
 
+const JSON_FORMAT_INSTRUCTION = `\n\nRespond ONLY with JSON in this exact format: {"score": <number 0-10>, "reason": "<one sentence>"}`;
+
 async function runLLMFilter(job: any, prompt: PromptConfig, miner: MinerConfig): Promise<{ score: number; reason: string }> {
   const userContent = formatJobFields(job, prompt.fieldsToCheck);
 
@@ -328,6 +330,7 @@ async function runLLMFilter(job: any, prompt: PromptConfig, miner: MinerConfig):
     if (miner.searchDescription) systemContent += `\nWhat this search targets: ${miner.searchDescription}`;
     if (miner.ourOffering) systemContent += `\nWhat we offer/sell: ${miner.ourOffering}`;
   }
+  systemContent += JSON_FORMAT_INSTRUCTION;
 
   const response = await openai.chat.completions.create({
     model: prompt.model,

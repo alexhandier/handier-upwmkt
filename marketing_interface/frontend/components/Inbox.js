@@ -1,15 +1,18 @@
 import {useState, useMemo, useCallback, useRef} from 'react';
 import {useGlobalConfig} from '@airtable/blocks/interface/ui';
-import {Check, X, CaretDown, Prohibit} from '@phosphor-icons/react';
+import {Check, X, CaretDown, Prohibit, MagnifyingGlass} from '@phosphor-icons/react';
 import {JOB_FIELDS, STATUSES, PRIORITIES} from '../lib/fields';
 import {formatBudget, formatTimeAgo} from '../lib/hooks';
 import JobDetail from './JobDetail';
+import CoverLetterModal from './CoverLetterModal';
 
 const SWIPE_THRESHOLD = 80;
 
 export default function Inbox({table, records}) {
     const [selectedId, setSelectedId] = useState(null);
     const [filter, setFilter] = useState('all');
+    const [sortBy, setSortBy] = useState('recent');
+    const [search, setSearch] = useState('');
 
     // Discard modal
     const [discardTarget, setDiscardTarget] = useState(null);
@@ -36,20 +39,37 @@ export default function Inbox({table, records}) {
 
     const filteredJobs = useMemo(() => {
         if (!records) return [];
+        const q = search.trim().toLowerCase();
         return records
             .filter(r => {
                 const status = r.getCellValueAsString(JOB_FIELDS.STATUS);
-                if (filter === 'all') return status === STATUSES.NEW_JOBS;
-                if (filter === 'qualified') return status === STATUSES.QUALIFIED;
-                if (filter === 'discarded') return status === STATUSES.DISCARDED;
-                return status === STATUSES.NEW_JOBS;
+                if (filter === 'all' && status !== STATUSES.NEW_JOBS) return false;
+                if (filter === 'qualified' && status !== STATUSES.QUALIFIED) return false;
+                if (filter === 'discarded' && status !== STATUSES.DISCARDED) return false;
+                if (q) {
+                    const title = r.getCellValueAsString(JOB_FIELDS.TITLE).toLowerCase();
+                    const summary = r.getCellValueAsString(JOB_FIELDS.SUMMARY).toLowerCase();
+                    const skills = r.getCellValueAsString(JOB_FIELDS.SKILLS).toLowerCase();
+                    const label = r.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL).toLowerCase();
+                    if (!title.includes(q) && !summary.includes(q) && !skills.includes(q) && !label.includes(q)) return false;
+                }
+                return true;
             })
             .sort((a, b) => {
                 const scoreA = a.getCellValue(JOB_FIELDS.AI_SCORE) || 0;
                 const scoreB = b.getCellValue(JOB_FIELDS.AI_SCORE) || 0;
+                const dateA = a.getCellValue(JOB_FIELDS.POSTED_AT);
+                const dateB = b.getCellValue(JOB_FIELDS.POSTED_AT);
+                const timeA = dateA ? new Date(dateA).getTime() : 0;
+                const timeB = dateB ? new Date(dateB).getTime() : 0;
+                if (sortBy === 'score') {
+                    if (scoreA !== scoreB) return scoreB - scoreA;
+                    return timeB - timeA;
+                }
+                if (timeA !== timeB) return timeB - timeA;
                 return scoreB - scoreA;
             });
-    }, [records, filter]);
+    }, [records, filter, sortBy, search]);
 
     const selectedRecord = useMemo(() => {
         if (!selectedId || !records) return null;
@@ -75,14 +95,14 @@ export default function Inbox({table, records}) {
         setDiscardReason('');
     }, []);
 
-    // Confirm discard
-    const confirmDiscard = useCallback(async () => {
-        if (!discardTarget || !discardReason.trim()) return;
+    // Confirm discard (with or without comment)
+    const confirmDiscard = useCallback(async (skipComment) => {
+        if (!discardTarget) return;
+        if (!skipComment && !discardReason.trim()) return;
         if (!table.hasPermissionToUpdateRecord(discardTarget)) return;
-        await table.updateRecordAsync(discardTarget, {
-            [JOB_FIELDS.STATUS]: {name: STATUSES.DISCARDED},
-            [JOB_FIELDS.COMMENTS]: discardReason.trim(),
-        });
+        const fields = {[JOB_FIELDS.STATUS]: {name: STATUSES.DISCARDED}};
+        if (discardReason.trim()) fields[JOB_FIELDS.COMMENTS] = discardReason.trim();
+        await table.updateRecordAsync(discardTarget, fields);
         setDiscardTarget(null);
         setDiscardReason('');
     }, [table, discardTarget, discardReason]);
@@ -95,47 +115,113 @@ export default function Inbox({table, records}) {
         });
     }, [table]);
 
+    // Apply template directly (no modal)
+    const applyTemplate = useCallback(async (record, text) => {
+        if (!table.hasPermissionToUpdateRecord(record)) return;
+        await table.updateRecordAsync(record, {
+            [JOB_FIELDS.COVER_LETTER]: text || null,
+        });
+    }, [table]);
+
     // Cover letter modal
     const openCoverModal = useCallback((record) => {
-        const existing = record.getCellValueAsString(JOB_FIELDS.COVER_LETTER) || '';
-        setCoverDraft(existing);
+        setCoverDraft(record.getCellValueAsString(JOB_FIELDS.COVER_LETTER) || '');
         setCoverTarget(record);
     }, []);
 
-    const saveCoverLetter = useCallback(async () => {
+    const saveCoverLetter = useCallback(async (text) => {
         if (!coverTarget) return;
         if (!table.hasPermissionToUpdateRecord(coverTarget)) return;
         await table.updateRecordAsync(coverTarget, {
-            [JOB_FIELDS.COVER_LETTER]: coverDraft || null,
+            [JOB_FIELDS.COVER_LETTER]: text || null,
         });
         setCoverTarget(null);
         setCoverDraft('');
-    }, [table, coverTarget, coverDraft]);
+    }, [table, coverTarget]);
+
+    // Resizable left pane
+    const [paneWidth, setPaneWidth] = useState(340);
+    const dragging = useRef(false);
+    const dragStartX = useRef(0);
+    const dragStartWidth = useRef(0);
+
+    const onResizeStart = useCallback((e) => {
+        e.preventDefault();
+        dragging.current = true;
+        dragStartX.current = e.clientX;
+        dragStartWidth.current = paneWidth;
+        const onMove = (ev) => {
+            if (!dragging.current) return;
+            const dx = ev.clientX - dragStartX.current;
+            setPaneWidth(Math.max(240, Math.min(700, dragStartWidth.current + dx)));
+        };
+        const onUp = () => {
+            dragging.current = false;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }, [paneWidth]);
 
     const filterLabel = {all: 'New', qualified: 'Qualified', discarded: 'Discarded'}[filter] || 'New';
     const count = filteredJobs.length;
 
     return (
-        <div className="flex h-full relative">
+        <div className="flex h-full min-h-0 relative">
             {/* Left: Job list */}
-            <div className="w-[340px] shrink-0 border-r border-gray-gray100 dark:border-gray-gray700 flex flex-col">
+            <div style={{width: paneWidth}} className="shrink-0 flex flex-col min-h-0">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-gray100 dark:border-gray-gray700">
                     <div className="flex items-center gap-2">
                         <h2 className="text-sm font-semibold">{filterLabel}</h2>
                         <span className="text-xs text-gray-gray400 tabular-nums">{count}</span>
                     </div>
-                    <div className="relative">
-                        <select
-                            value={filter}
-                            onChange={e => setFilter(e.target.value)}
-                            className="appearance-none bg-transparent text-xs text-gray-gray400 pr-4 cursor-pointer focus:outline-none"
-                        >
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-0.5 bg-gray-gray50 dark:bg-gray-gray800 rounded-md p-0.5">
+                            <button
+                                onClick={() => setSortBy('recent')}
+                                className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                                    sortBy === 'recent'
+                                        ? 'bg-white dark:bg-gray-gray700 text-gray-gray700 dark:text-gray-gray200 shadow-sm'
+                                        : 'text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'
+                                }`}
+                            >
+                                Recent
+                            </button>
+                            <button
+                                onClick={() => setSortBy('score')}
+                                className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                                    sortBy === 'score'
+                                        ? 'bg-white dark:bg-gray-gray700 text-gray-gray700 dark:text-gray-gray200 shadow-sm'
+                                        : 'text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'
+                                }`}
+                            >
+                                Top rated
+                            </button>
+                        </div>
+                        <div className="relative">
+                            <select
+                                value={filter}
+                                onChange={e => setFilter(e.target.value)}
+                                className="appearance-none bg-transparent text-xs text-gray-gray400 pr-4 cursor-pointer focus:outline-none"
+                            >
                             <option value="all">New Jobs</option>
                             <option value="qualified">Qualified</option>
                             <option value="discarded">Discarded</option>
-                        </select>
-                        <CaretDown size={10} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-gray400 pointer-events-none" />
+                            </select>
+                            <CaretDown size={10} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-gray400 pointer-events-none" />
+                        </div>
                     </div>
+                </div>
+
+                <div className="relative px-3 py-2 border-b border-gray-gray75 dark:border-gray-gray800">
+                    <MagnifyingGlass size={12} className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-gray300 dark:text-gray-gray500" />
+                    <input
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search jobs..."
+                        className="w-full text-xs bg-gray-gray25 dark:bg-gray-gray800 rounded-md pl-7 pr-3 py-1.5 text-gray-gray700 dark:text-gray-gray200 placeholder-gray-gray300 dark:placeholder-gray-gray600 focus:outline-none focus:ring-1 focus:ring-gray-gray200 dark:focus:ring-gray-gray600"
+                    />
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
@@ -158,8 +244,14 @@ export default function Inbox({table, records}) {
                 </div>
             </div>
 
+            {/* Resize handle */}
+            <div
+                onMouseDown={onResizeStart}
+                className="w-1 cursor-col-resize hover:bg-blue-blue/30 active:bg-blue-blue/50 transition-colors shrink-0"
+            />
+
             {/* Right: Detail pane */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto min-w-0">
                 {selectedRecord ? (
                     <JobDetail
                         record={selectedRecord}
@@ -168,6 +260,7 @@ export default function Inbox({table, records}) {
                         onDiscard={() => handleDiscardRequest(selectedRecord)}
                         onPriority={(p) => handlePriority(selectedRecord, p)}
                         onCoverLetter={() => openCoverModal(selectedRecord)}
+                        onApplyTemplate={(text) => applyTemplate(selectedRecord, text)}
                     />
                 ) : (
                     <div className="flex items-center justify-center h-full">
@@ -194,20 +287,28 @@ export default function Inbox({table, records}) {
                             className="w-full text-sm border border-gray-gray200 dark:border-gray-gray600 rounded-md p-3 bg-transparent focus:outline-none focus:border-red-red resize-none mb-3"
                             autoFocus
                         />
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex items-center justify-between">
                             <button
-                                onClick={() => setDiscardTarget(null)}
-                                className="text-xs px-3 py-1.5 text-gray-gray400 hover:text-gray-gray600 transition-colors"
+                                onClick={() => confirmDiscard(true)}
+                                className="text-xs text-gray-gray300 dark:text-gray-gray600 hover:text-gray-gray400 dark:hover:text-gray-gray500 transition-colors"
                             >
-                                Cancel
+                                Skip comment
                             </button>
-                            <button
-                                onClick={confirmDiscard}
-                                disabled={!discardReason.trim()}
-                                className="text-xs px-3 py-1.5 rounded-md bg-red-red text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
-                            >
-                                Discard
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setDiscardTarget(null)}
+                                    className="text-xs px-3 py-1.5 text-gray-gray400 hover:text-gray-gray600 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => confirmDiscard(false)}
+                                    disabled={!discardReason.trim()}
+                                    className="text-xs px-3 py-1.5 rounded-md bg-red-red text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
+                                >
+                                    Discard
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </ModalOverlay>
@@ -216,34 +317,12 @@ export default function Inbox({table, records}) {
             {/* Cover letter modal */}
             {coverTarget && (
                 <ModalOverlay onClose={() => setCoverTarget(null)}>
-                    <div className="w-full max-w-lg">
-                        <h3 className="text-sm font-semibold mb-1">Cover Letter</h3>
-                        <p className="text-xs text-gray-gray400 mb-4 truncate">
-                            {coverTarget.getCellValueAsString(JOB_FIELDS.TITLE)}
-                        </p>
-                        <textarea
-                            value={coverDraft}
-                            onChange={e => setCoverDraft(e.target.value)}
-                            placeholder="Dear client..."
-                            rows={12}
-                            className="w-full text-sm border border-gray-gray200 dark:border-gray-gray600 rounded-md p-4 bg-transparent focus:outline-none focus:border-blue-blue resize-none mb-3 leading-relaxed"
-                            autoFocus
-                        />
-                        <div className="flex gap-2 justify-end">
-                            <button
-                                onClick={() => setCoverTarget(null)}
-                                className="text-xs px-3 py-1.5 text-gray-gray400 hover:text-gray-gray600 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={saveCoverLetter}
-                                className="text-xs px-3 py-1.5 rounded-md bg-gray-gray900 dark:bg-white text-white dark:text-gray-gray900 font-medium hover:opacity-90 transition-opacity"
-                            >
-                                Save
-                            </button>
-                        </div>
-                    </div>
+                    <CoverLetterModal
+                        jobTitle={coverTarget.getCellValueAsString(JOB_FIELDS.TITLE)}
+                        initialDraft={coverDraft}
+                        onSave={saveCoverLetter}
+                        onClose={() => setCoverTarget(null)}
+                    />
                 </ModalOverlay>
             )}
         </div>

@@ -1,7 +1,8 @@
 import {useState} from 'react';
 import {useBase, useRecords} from '@airtable/blocks/interface/ui';
-import {Tray, MagnifyingGlass, Funnel} from '@phosphor-icons/react';
+import {Tray, MagnifyingGlass, Funnel, ChartBar} from '@phosphor-icons/react';
 import {TABLES} from './lib/fields';
+import Dashboard from './components/Dashboard';
 import Inbox from './components/Inbox';
 import Pipeline from './components/Pipeline';
 import Miners from './components/Miners';
@@ -9,6 +10,7 @@ import Miners from './components/Miners';
 const TABS = [
     {id: 'inbox', label: 'Inbox', icon: Tray},
     {id: 'pipeline', label: 'Pipeline', icon: Funnel},
+    {id: 'dashboard', label: 'Dashboard', icon: ChartBar},
     {id: 'miners', label: 'Miners', icon: MagnifyingGlass},
 ];
 
@@ -60,6 +62,9 @@ export default function App() {
             </nav>
 
             <div className="flex-1 overflow-hidden">
+                {activeTab === 'dashboard' && (
+                    <Dashboard records={jobRecords} />
+                )}
                 {activeTab === 'inbox' && (
                     <Inbox table={jobsTable} records={jobRecords} />
                 )}

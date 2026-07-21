@@ -2,6 +2,8 @@ import {useState, useMemo, useCallback} from 'react';
 import {CaretDown, CaretRight, Check, X, PencilLine, ArrowSquareOut, ArrowRight} from '@phosphor-icons/react';
 import {JOB_FIELDS, STATUSES, PIPELINE_STAGES, PRIORITIES} from '../lib/fields';
 import {formatBudget, formatTimeAgo} from '../lib/hooks';
+import CoverLetterModal from './CoverLetterModal';
+import TemplateQuickPicker from './TemplateQuickPicker';
 
 const STAGE_DOT = {
     'Qualified': 'bg-green-green',
@@ -28,11 +30,19 @@ export default function Pipeline({table, records}) {
 
     const groups = useMemo(() => {
         const g = {};
+        const priorityOrder = {P1: 0, P2: 1, P3: 2};
         STAGE_ORDER.forEach(s => g[s] = []);
         if (!records) return g;
         for (const r of records) {
             const status = r.getCellValueAsString(JOB_FIELDS.STATUS);
             if (g[status]) g[status].push(r);
+        }
+        for (const stage of STAGE_ORDER) {
+            g[stage].sort((a, b) => {
+                const pa = priorityOrder[a.getCellValueAsString(JOB_FIELDS.PRIORITY)] ?? 3;
+                const pb = priorityOrder[b.getCellValueAsString(JOB_FIELDS.PRIORITY)] ?? 3;
+                return pa - pb;
+            });
         }
         return g;
     }, [records]);
@@ -87,17 +97,24 @@ export default function Pipeline({table, records}) {
         setDiscardReason('');
     }, []);
 
-    const confirmDiscard = useCallback(async () => {
-        if (!discardTarget || !discardReason.trim()) return;
+    const confirmDiscard = useCallback(async (skipComment) => {
+        if (!discardTarget) return;
+        if (!skipComment && !discardReason.trim()) return;
         if (!table.hasPermissionToUpdateRecord(discardTarget)) return;
-        await table.updateRecordAsync(discardTarget, {
-            [JOB_FIELDS.STATUS]: {name: STATUSES.DISCARDED},
-            [JOB_FIELDS.COMMENTS]: discardReason.trim(),
-        });
+        const fields = {[JOB_FIELDS.STATUS]: {name: STATUSES.DISCARDED}};
+        if (discardReason.trim()) fields[JOB_FIELDS.COMMENTS] = discardReason.trim();
+        await table.updateRecordAsync(discardTarget, fields);
         setDiscardTarget(null);
         setDiscardReason('');
         setSelectedId(null);
     }, [table, discardTarget, discardReason]);
+
+    const applyTemplate = useCallback(async (record, text) => {
+        if (!table.hasPermissionToUpdateRecord(record)) return;
+        await table.updateRecordAsync(record, {
+            [JOB_FIELDS.COVER_LETTER]: text || null,
+        });
+    }, [table]);
 
     const openCoverModal = useCallback((record) => {
         const existing = record.getCellValueAsString(JOB_FIELDS.COVER_LETTER) || '';
@@ -105,15 +122,15 @@ export default function Pipeline({table, records}) {
         setCoverTarget(record);
     }, []);
 
-    const saveCoverLetter = useCallback(async () => {
+    const saveCoverLetter = useCallback(async (text) => {
         if (!coverTarget) return;
         if (!table.hasPermissionToUpdateRecord(coverTarget)) return;
         await table.updateRecordAsync(coverTarget, {
-            [JOB_FIELDS.COVER_LETTER]: coverDraft || null,
+            [JOB_FIELDS.COVER_LETTER]: text || null,
         });
         setCoverTarget(null);
         setCoverDraft('');
-    }, [table, coverTarget, coverDraft]);
+    }, [table, coverTarget]);
 
     return (
         <div className="h-full overflow-y-auto relative">
@@ -169,6 +186,7 @@ export default function Pipeline({table, records}) {
                         onDiscard={() => handleDiscardRequest(selectedRecord)}
                         onPriority={(p) => handlePriority(selectedRecord, p)}
                         onCoverLetter={() => openCoverModal(selectedRecord)}
+                        onApplyTemplate={(text) => applyTemplate(selectedRecord, text)}
                     />
                 </ModalOverlay>
             )}
@@ -189,9 +207,12 @@ export default function Pipeline({table, records}) {
                             className="w-full text-sm border border-gray-gray200 dark:border-gray-gray600 rounded-md p-3 bg-transparent focus:outline-none focus:border-red-red resize-none mb-3"
                             autoFocus
                         />
-                        <div className="flex gap-2 justify-end">
-                            <button onClick={() => setDiscardTarget(null)} className="text-xs px-3 py-1.5 text-gray-gray400 hover:text-gray-gray600 transition-colors">Cancel</button>
-                            <button onClick={confirmDiscard} disabled={!discardReason.trim()} className="text-xs px-3 py-1.5 rounded-md bg-red-red text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-40">Discard</button>
+                        <div className="flex items-center justify-between">
+                            <button onClick={() => confirmDiscard(true)} className="text-xs text-gray-gray300 dark:text-gray-gray600 hover:text-gray-gray400 dark:hover:text-gray-gray500 transition-colors">Skip comment</button>
+                            <div className="flex gap-2">
+                                <button onClick={() => setDiscardTarget(null)} className="text-xs px-3 py-1.5 text-gray-gray400 hover:text-gray-gray600 transition-colors">Cancel</button>
+                                <button onClick={() => confirmDiscard(false)} disabled={!discardReason.trim()} className="text-xs px-3 py-1.5 rounded-md bg-red-red text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-40">Discard</button>
+                            </div>
                         </div>
                     </div>
                 </ModalOverlay>
@@ -226,24 +247,12 @@ export default function Pipeline({table, records}) {
             {/* Cover letter modal */}
             {coverTarget && (
                 <ModalOverlay onClose={() => setCoverTarget(null)}>
-                    <div className="w-full max-w-lg">
-                        <h3 className="text-sm font-semibold mb-1">Cover Letter</h3>
-                        <p className="text-xs text-gray-gray400 mb-4 truncate">
-                            {coverTarget.getCellValueAsString(JOB_FIELDS.TITLE)}
-                        </p>
-                        <textarea
-                            value={coverDraft}
-                            onChange={e => setCoverDraft(e.target.value)}
-                            placeholder="Dear client..."
-                            rows={12}
-                            className="w-full text-sm border border-gray-gray200 dark:border-gray-gray600 rounded-md p-4 bg-transparent focus:outline-none focus:border-blue-blue resize-none mb-3 leading-relaxed"
-                            autoFocus
-                        />
-                        <div className="flex gap-2 justify-end">
-                            <button onClick={() => setCoverTarget(null)} className="text-xs px-3 py-1.5 text-gray-gray400 hover:text-gray-gray600 transition-colors">Cancel</button>
-                            <button onClick={saveCoverLetter} className="text-xs px-3 py-1.5 rounded-md bg-gray-gray900 dark:bg-white text-white dark:text-gray-gray900 font-medium hover:opacity-90 transition-opacity">Save</button>
-                        </div>
-                    </div>
+                    <CoverLetterModal
+                        jobTitle={coverTarget.getCellValueAsString(JOB_FIELDS.TITLE)}
+                        initialDraft={coverDraft}
+                        onSave={saveCoverLetter}
+                        onClose={() => setCoverTarget(null)}
+                    />
                 </ModalOverlay>
             )}
         </div>
@@ -259,11 +268,25 @@ function PipelineRow({record, selected, onClick}) {
     const summary = record.getCellValueAsString(JOB_FIELDS.SUMMARY);
     const searchLabel = record.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL);
 
+    const borderColor = priority === 'P1'
+        ? 'border-l-red-red/50'
+        : priority === 'P2'
+        ? 'border-l-yellow-yellow/50'
+        : priority === 'P3'
+        ? 'border-l-gray-gray200 dark:border-l-gray-gray600'
+        : 'border-l-transparent';
+
+    const bgTint = priority === 'P1'
+        ? 'bg-red-redLight3/30 dark:bg-red-red/[0.04]'
+        : priority === 'P2'
+        ? 'bg-yellow-yellowLight3/30 dark:bg-yellow-yellow/[0.04]'
+        : '';
+
     return (
         <button
             onClick={onClick}
-            className={`w-full text-left px-5 py-2.5 border-b border-gray-gray50 dark:border-gray-gray800 transition-colors ${
-                selected ? 'bg-gray-gray50 dark:bg-gray-gray700' : 'hover:bg-gray-gray25 dark:hover:bg-gray-gray800/50'
+            className={`w-full text-left pl-4 pr-5 py-2.5 border-b border-gray-gray50 dark:border-gray-gray800 border-l-2 transition-colors ${borderColor} ${
+                selected ? 'bg-gray-gray50 dark:bg-gray-gray700' : `${bgTint} hover:bg-gray-gray25 dark:hover:bg-gray-gray800/50`
             }`}
         >
             <div className="flex items-center gap-2">
@@ -291,7 +314,7 @@ function PipelineRow({record, selected, onClick}) {
     );
 }
 
-function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCoverLetter}) {
+function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCoverLetter, onApplyTemplate}) {
     const title = record.getCellValueAsString(JOB_FIELDS.TITLE);
     const url = record.getCellValueAsString(JOB_FIELDS.URL);
     const description = record.getCellValueAsString(JOB_FIELDS.DESCRIPTION);
@@ -346,6 +369,7 @@ function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCo
                     <PencilLine size={10} />
                     {coverLetter ? 'Edit Letter' : 'Cover Letter'}
                 </button>
+                <TemplateQuickPicker onApply={onApplyTemplate} />
 
                 <div className="flex items-center gap-1 ml-auto">
                     {PRIORITIES.map(p => (

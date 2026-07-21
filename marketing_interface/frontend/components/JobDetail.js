@@ -1,8 +1,9 @@
 import {ArrowSquareOut, Check, X, PencilLine} from '@phosphor-icons/react';
 import {JOB_FIELDS, STATUSES, PRIORITIES} from '../lib/fields';
 import {formatBudget, formatTimeAgo} from '../lib/hooks';
+import TemplateQuickPicker from './TemplateQuickPicker';
 
-export default function JobDetail({record, table, onQualify, onDiscard, onPriority, onCoverLetter}) {
+export default function JobDetail({record, table, onQualify, onDiscard, onPriority, onCoverLetter, onApplyTemplate}) {
     const title = record.getCellValueAsString(JOB_FIELDS.TITLE);
     const url = record.getCellValueAsString(JOB_FIELDS.URL);
     const description = record.getCellValueAsString(JOB_FIELDS.DESCRIPTION);
@@ -54,6 +55,7 @@ export default function JobDetail({record, table, onQualify, onDiscard, onPriori
                     label={coverLetter ? 'Edit Cover Letter' : 'Write Cover Letter'}
                     variant="ghost"
                 />
+                <TemplateQuickPicker onApply={onApplyTemplate} />
 
                 <div className="flex items-center gap-1 ml-auto">
                     {PRIORITIES.map(p => (

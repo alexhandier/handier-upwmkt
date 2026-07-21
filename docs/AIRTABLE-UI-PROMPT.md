@@ -20,6 +20,12 @@ Three tables in the "Marketing" base:
 
 **Implementation:** List layout, filtered to `Status = "New Jobs"`, sorted by AI Score descending (best first).
 
+**Search bar (top of the list):**
+- Enable the list element's built-in **Search** so Dal can type to filter the inbox instantly.
+- Searches across Title, Summary, and Skills (the text fields worth scanning).
+- Positioned at the top of the Inbox, above the list. Keep it minimal — a single search input, no advanced filter chrome.
+- Live filtering as she types; clearing the box restores the full "New Jobs" feed.
+
 **Visible columns per row:**
 - Title (bold, primary)
 - Summary (the AI one-liner — this is what Dal reads to decide)
@@ -29,7 +35,8 @@ Three tables in the "Marketing" base:
 
 **Actions on each row (buttons or quick actions):**
 - Qualify → sets Status to "Qualified", prompts for Priority (P1/P2/P3)
-- Discard → sets Status to "Discarded"
+- Discard → sets Status to "Discarded" (may prompt for/open a comment for triage notes)
+- **Quick discard (subtle)** → an icon-only "×" action that sets Status to "Discarded" immediately, with **no comment prompt**. This is the fast path for obvious no-fits. Keep it visually understated (small, muted/monochrome, revealed on row hover) so it never competes with Qualify — it's the low-friction "just get it off the board" gesture.
 - Expand → shows full record (description, client stats, skills)
 
 **Key behavior:**

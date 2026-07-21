@@ -362,23 +362,38 @@ async function runLLMFilter(job: any, prompt: PromptConfig, miner: MinerConfig):
   }
   systemContent += JSON_FORMAT_INSTRUCTION;
 
-  const response = await openai.chat.completions.create({
-    model: prompt.model,
-    messages: [
-      { role: "system", content: systemContent },
-      { role: "user", content: userContent },
-    ],
-    temperature: 0.1,
-    max_completion_tokens: 150,
-  });
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: prompt.model,
+        messages: [
+          { role: "system", content: systemContent },
+          { role: "user", content: userContent },
+        ],
+        temperature: 0.1,
+        max_completion_tokens: 150,
+      });
 
-  const content = response.choices[0]?.message?.content || "";
-  const match = content.match(/\{[\s\S]*\}/);
-  if (match) {
-    const parsed = JSON.parse(match[0]);
-    return { score: Number(parsed.score), reason: String(parsed.reason) };
+      const content = response.choices[0]?.message?.content || "";
+      const match = content.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        return { score: Number(parsed.score), reason: String(parsed.reason) };
+      }
+      return { score: 0, reason: `Parse error: ${content.slice(0, 80)}` };
+    } catch (err: any) {
+      if (err?.status === 429 || err?.code === "rate_limit_exceeded") {
+        if (attempt === MAX_RETRIES) throw new Error("OpenAI quota exceeded after retries. Aborting run.");
+        const waitSec = Math.pow(2, attempt + 1) * 5; // 10s, 20s, 40s
+        console.warn(`    [retry] 429 rate limit, waiting ${waitSec}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        continue;
+      }
+      throw err;
+    }
   }
-  return { score: 0, reason: `Parse error: ${content.slice(0, 80)}` };
+  return { score: 0, reason: "Retry exhausted" };
 }
 
 // --- Transform to Airtable ---
@@ -421,7 +436,7 @@ function toAirtableFields(job: any, miner: MinerConfig, score: number, reason: s
 
 // --- Main ---
 
-const CONCURRENCY = 10;
+const CONCURRENCY = 5;
 
 async function runBatch<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = [];

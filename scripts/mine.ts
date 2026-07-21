@@ -129,16 +129,24 @@ interface MinerConfig {
   deepPrompt: PromptConfig | null;
 }
 
+// Model overrides: use cheapest effective models regardless of Airtable config
+const MODEL_OVERRIDES: Record<string, string> = {
+  "Superficial": "gpt-5.4-nano",   // $0.20/1M in, $1.25/1M out
+  "Deep": "gpt-5.4-mini",          // $0.75/1M in, $4.50/1M out
+};
+
 async function loadMiners(): Promise<MinerConfig[]> {
   // Load all prompts first
   const promptRecords = await airtableGet("Prompts");
   const promptsById = new Map<string, PromptConfig>();
   for (const rec of promptRecords) {
+    const type = rec.fields["Type"] || "";
+    const model = MODEL_OVERRIDES[type] || rec.fields["Model"] || "gpt-5.4-mini";
     promptsById.set(rec.id, {
       id: rec.id,
       name: rec.fields["Name"] || "",
-      type: rec.fields["Type"] || "",
-      model: rec.fields["Model"] || "gpt-5.4-mini",
+      type,
+      model,
       systemPrompt: rec.fields["System Prompt"] || "",
       fieldsToCheck: (rec.fields["Fields to Check"] || "ALL").split(",").map((s: string) => s.trim()),
       threshold: rec.fields["Threshold"] ?? 4,

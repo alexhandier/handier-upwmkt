@@ -59,15 +59,21 @@ const RULES = {
   maxApplicants: 50,
   maxAgeDays: 14,
   minHourlyRate: 30,
-  minFixedBudget: 200,
+  minFixedBudget: 50,
+  // Block if found anywhere in title+description+skills
   excludeKeywords: [
     "data entry", "virtual assistant", "transcription", "copy paste",
-    "cold call", "cold calling", "phone call", "telemarketing",
-    "sales closer", "closing deals",
+    "telemarketing",
     "commission only", "commission based", "commission-based", "pay per lead", "performance-based pay only",
     "social media manager", "social media marketing", "meta ads", "facebook ads",
     "instagram marketing", "tiktok", "google ads", "ppc specialist",
     "ugc creator", "influencer outreach", "content creator",
+  ],
+  // Block only if found in the TITLE (not description — many good jobs mention calling in passing)
+  excludeTitleKeywords: [
+    "cold call", "cold calling", "phone call",
+    "sales closer", "closer ",
+    "telemarketer",
   ],
   excludeLanguages: ["french", "german", "portuguese", "italian", "arabic", "mandarin", "chinese", "japanese", "korean", "hindi", "russian", "dutch", "turkish", "polish", "swedish", "norwegian", "danish", "finnish", "greek", "hebrew", "thai", "vietnamese", "indonesian", "malay", "tagalog", "filipino"],
 };
@@ -335,6 +341,7 @@ function applyRules(job: any): { passed: boolean; reason?: string } {
   }
 
   const text = `${job.title} ${job.description} ${job.skills?.map((s: any) => s.prettyName).join(" ") || ""}`.toLowerCase();
+  const titleLower = (job.title || "").toLowerCase();
 
   // Language check: discard if requires non-English/Spanish languages
   for (const lang of RULES.excludeLanguages) {
@@ -348,6 +355,14 @@ function applyRules(job: any): { passed: boolean; reason?: string } {
       return { passed: false, reason: `Keyword: "${kw}"` };
     }
   }
+
+  // Title-only keywords (block cold calling/closer only if it's in the title, not buried in description)
+  for (const kw of RULES.excludeTitleKeywords) {
+    if (titleLower.includes(kw.toLowerCase())) {
+      return { passed: false, reason: `Title keyword: "${kw}"` };
+    }
+  }
+
   return { passed: true };
 }
 

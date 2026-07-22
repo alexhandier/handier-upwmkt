@@ -259,7 +259,7 @@ async function fetchJobs(accessToken: string, searchExpression: string, maxPages
 
   const firstSearch: any = firstJson.data?.marketplaceJobPostingsSearch;
   if (!firstSearch) return allJobs;
-  for (const edge of firstSearch.edges) allJobs.push(edge.node);
+  for (const edge of firstSearch.edges) { if (edge?.node) allJobs.push(edge.node); }
   console.log(` ${firstSearch.edges.length} jobs`);
 
   if (!firstSearch.pageInfo.hasNextPage || maxPages <= 1) return allJobs;
@@ -292,7 +292,7 @@ async function fetchJobs(accessToken: string, searchExpression: string, maxPages
     const search: any = json.data?.marketplaceJobPostingsSearch;
     if (!search) break;
 
-    for (const edge of search.edges) allJobs.push(edge.node);
+    for (const edge of search.edges) { if (edge?.node) allJobs.push(edge.node); }
     console.log(` ${search.edges.length} jobs`);
 
     if (!search.pageInfo.hasNextPage) break;

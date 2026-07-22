@@ -59,7 +59,16 @@ const RULES = {
   maxApplicants: 50,
   maxAgeDays: 14,
   minHourlyRate: 30,
-  excludeKeywords: ["data entry", "virtual assistant", "transcription", "copy paste"],
+  minFixedBudget: 200,
+  excludeKeywords: [
+    "data entry", "virtual assistant", "transcription", "copy paste",
+    "cold call", "cold calling", "phone call", "telemarketing",
+    "sales closer", "closing deals",
+    "commission only", "commission based", "commission-based", "pay per lead", "performance-based pay only",
+    "social media manager", "social media marketing", "meta ads", "facebook ads",
+    "instagram marketing", "tiktok", "google ads", "ppc specialist",
+    "ugc creator", "influencer outreach", "content creator",
+  ],
   excludeLanguages: ["french", "german", "portuguese", "italian", "arabic", "mandarin", "chinese", "japanese", "korean", "hindi", "russian", "dutch", "turkish", "polish", "swedish", "norwegian", "danish", "finnish", "greek", "hebrew", "thai", "vietnamese", "indonesian", "malay", "tagalog", "filipino"],
 };
 
@@ -314,6 +323,14 @@ function applyRules(job: any): { passed: boolean; reason?: string } {
     const maxRate = parseFloat(job.hourlyBudgetMax.displayValue?.replace(/[^0-9.]/g, "") || "0");
     if (maxRate > 0 && maxRate < RULES.minHourlyRate) {
       return { passed: false, reason: `Low rate: $${maxRate}/hr (min $${RULES.minHourlyRate})` };
+    }
+  }
+
+  // Fixed budget floor: discard tiny fixed-price jobs
+  if (job.amount) {
+    const budget = parseFloat(job.amount.displayValue?.replace(/[^0-9.]/g, "") || "0");
+    if (budget > 0 && budget < RULES.minFixedBudget) {
+      return { passed: false, reason: `Low budget: $${budget} (min $${RULES.minFixedBudget})` };
     }
   }
 

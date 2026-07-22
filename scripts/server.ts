@@ -154,7 +154,7 @@ const server = createServer(async (req, res) => {
       timestamp: new Date().toISOString(),
       tokens: tokenStatus,
       data_dir: DATA_DIR,
-      cron: { interval_ms: CRON_INTERVAL_MS, last_run: lastMineRun, running: mineRunning },
+      cron: { schedule_utc: SCHEDULE_HOURS_UTC.map(h => h + ":00"), last_run: lastMineRun, running: mineRunning },
     }, null, 2));
     return;
   }
@@ -175,13 +175,30 @@ const server = createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "not found" }));
 });
 
-// --- Cron: run miner on interval ---
+// --- Cron: run miner on schedule ---
 
 import { spawn } from "node:child_process";
 
-const CRON_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+// Schedule: 3x/day at 6 AM, 12 PM, 5 PM (UTC-3 = 09:00, 15:00, 20:00 UTC)
+const SCHEDULE_HOURS_UTC = [9, 15, 20];
+const CHECK_INTERVAL_MS = 60 * 1000; // check every minute
 let lastMineRun: string | null = null;
 let mineRunning = false;
+let lastTriggeredHour: number | null = null;
+
+function shouldRunNow(): boolean {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const utcMinute = now.getUTCMinutes();
+
+  // Trigger if we're within the first 2 minutes of a scheduled hour
+  // and haven't already triggered this hour
+  if (SCHEDULE_HOURS_UTC.includes(utcHour) && utcMinute < 2 && lastTriggeredHour !== utcHour) {
+    lastTriggeredHour = utcHour;
+    return true;
+  }
+  return false;
+}
 
 function triggerMine() {
   if (mineRunning) return;
@@ -226,16 +243,19 @@ function triggerMine() {
   });
 }
 
-// Start cron timer
-setInterval(triggerMine, CRON_INTERVAL_MS);
+// Check every minute if it's time to run
+setInterval(() => {
+  if (shouldRunNow()) triggerMine();
+}, CHECK_INTERVAL_MS);
 
-// Run once on startup (after a short delay to let the server settle)
+// Run once on startup
 setTimeout(triggerMine, 5000);
 
 server.listen(PORT, () => {
+  const scheduleLocal = SCHEDULE_HOURS_UTC.map(h => `${((h - 3 + 24) % 24).toString().padStart(2, "0")}:00`).join(", ");
   console.log(`[server] Listening on port ${PORT}`);
   console.log(`[server] Auth URL: ${REDIRECT_URI.replace("/auth/callback", "/auth")}`);
   console.log(`[server] Data dir: ${DATA_DIR}`);
   console.log(`[server] Tokens: ${existsSync(TOKENS_PATH) ? "found" : "not found (needs auth)"}`);
-  console.log(`[server] Cron: every ${CRON_INTERVAL_MS / 60000} min`);
+  console.log(`[server] Schedule: ${scheduleLocal} (UTC-3) / ${SCHEDULE_HOURS_UTC.map(h => h + ":00").join(", ")} UTC`);
 });

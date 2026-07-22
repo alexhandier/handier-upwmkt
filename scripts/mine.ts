@@ -681,24 +681,15 @@ async function main() {
   }
   // Filter miners that are due to run based on their interval
   const now = Date.now();
-  const dueMiners = miners.filter(miner => {
-    if (!miner.lastRun) return true;
-    const lastRunMs = new Date(miner.lastRun).getTime();
-    const elapsedMin = (now - lastRunMs) / 60_000;
-    if (elapsedMin < miner.runIntervalMinutes) {
-      console.log(`  [${miner.name}] SKIP — ran ${Math.round(elapsedMin)}m ago, interval is ${miner.runIntervalMinutes}m`);
-      return false;
-    }
-    return true;
-  });
+  const dueMiners = miners;
+  console.log(`  ${dueMiners.length} miner(s) to run\n`);
 
   if (dueMiners.length === 0) {
-    console.log("\n  No miners due to run. Done.");
+    console.log("\n  No active miners found. Done.");
     return;
   }
-  console.log(`  ${dueMiners.length} miner(s) due to run\n`);
 
-  // Run due miners sequentially (shared existingIds prevents cross-miner dupes)
+  // Run miners sequentially (shared existingIds prevents cross-miner dupes)
   let totalPassed = 0;
   for (const miner of dueMiners) {
     totalPassed += await runMiner(miner, accessToken, existingIds);

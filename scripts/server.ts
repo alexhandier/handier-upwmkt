@@ -154,7 +154,7 @@ const server = createServer(async (req, res) => {
       timestamp: new Date().toISOString(),
       tokens: tokenStatus,
       data_dir: DATA_DIR,
-      cron: { schedule_utc: SCHEDULE_HOURS_UTC.map(h => h + ":00"), last_run: lastMineRun, running: mineRunning },
+      cron: { interval_min: 30, work_hours_utc: `${WORK_HOURS_START_UTC}:00-${WORK_HOURS_END_UTC}:00`, last_run: lastMineRun, running: mineRunning },
     }, null, 2));
     return;
   }
@@ -179,25 +179,25 @@ const server = createServer(async (req, res) => {
 
 import { spawn } from "node:child_process";
 
-// Schedule: 3x/day at 6 AM, 12 PM, 5 PM (UTC-3 = 09:00, 15:00, 20:00 UTC)
-const SCHEDULE_HOURS_UTC = [9, 15, 20];
-const CHECK_INTERVAL_MS = 60 * 1000; // check every minute
+// Schedule: every 30 min during work hours 6 AM - 8 PM (UTC-3 = 09:00 - 23:00 UTC)
+const WORK_HOURS_START_UTC = 9;   // 6 AM UTC-3
+const WORK_HOURS_END_UTC = 23;    // 8 PM UTC-3
+const RUN_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const CHECK_INTERVAL_MS = 60 * 1000;    // check every minute
 let lastMineRun: string | null = null;
+let lastMineRunTs = 0;
 let mineRunning = false;
-let lastTriggeredHour: number | null = null;
 
-function shouldRunNow(): boolean {
+function isWorkHours(): boolean {
   const now = new Date();
   const utcHour = now.getUTCHours();
-  const utcMinute = now.getUTCMinutes();
+  return utcHour >= WORK_HOURS_START_UTC && utcHour < WORK_HOURS_END_UTC;
+}
 
-  // Trigger if we're within the first 2 minutes of a scheduled hour
-  // and haven't already triggered this hour
-  if (SCHEDULE_HOURS_UTC.includes(utcHour) && utcMinute < 2 && lastTriggeredHour !== utcHour) {
-    lastTriggeredHour = utcHour;
-    return true;
-  }
-  return false;
+function shouldRunNow(): boolean {
+  if (!isWorkHours()) return false;
+  const elapsed = Date.now() - lastMineRunTs;
+  return elapsed >= RUN_INTERVAL_MS;
 }
 
 function triggerMine() {
@@ -208,6 +208,7 @@ function triggerMine() {
   }
   mineRunning = true;
   lastMineRun = new Date().toISOString();
+  lastMineRunTs = Date.now();
   console.log(`[cron] Starting mine run at ${lastMineRun}`);
 
   const child = spawn("node", ["--import", "tsx", "scripts/mine.ts"], {
@@ -252,10 +253,9 @@ setInterval(() => {
 setTimeout(triggerMine, 5000);
 
 server.listen(PORT, () => {
-  const scheduleLocal = SCHEDULE_HOURS_UTC.map(h => `${((h - 3 + 24) % 24).toString().padStart(2, "0")}:00`).join(", ");
   console.log(`[server] Listening on port ${PORT}`);
   console.log(`[server] Auth URL: ${REDIRECT_URI.replace("/auth/callback", "/auth")}`);
   console.log(`[server] Data dir: ${DATA_DIR}`);
   console.log(`[server] Tokens: ${existsSync(TOKENS_PATH) ? "found" : "not found (needs auth)"}`);
-  console.log(`[server] Schedule: ${scheduleLocal} (UTC-3) / ${SCHEDULE_HOURS_UTC.map(h => h + ":00").join(", ")} UTC`);
+  console.log(`[server] Schedule: every 30 min, ${WORK_HOURS_START_UTC - 3}:00-${WORK_HOURS_END_UTC - 3}:00 UTC-3 (${WORK_HOURS_START_UTC}:00-${WORK_HOURS_END_UTC}:00 UTC)`);
 });

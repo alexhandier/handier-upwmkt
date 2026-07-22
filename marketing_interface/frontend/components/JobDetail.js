@@ -1,9 +1,14 @@
-import {ArrowSquareOut, Check, X, PencilLine} from '@phosphor-icons/react';
+import {useCallback} from 'react';
+import {ArrowSquareOut, Check, X, PencilLine, SkipForward} from '@phosphor-icons/react';
 import {JOB_FIELDS, STATUSES, PRIORITIES} from '../lib/fields';
 import {formatBudget, formatTimeAgo} from '../lib/hooks';
+import {safeGetString, safeGetValue} from '../lib/safe';
 import TemplateQuickPicker from './TemplateQuickPicker';
 
-export default function JobDetail({record, table, onQualify, onDiscard, onPriority, onCoverLetter, onApplyTemplate}) {
+const COVER_LETTER_TYPES = ['template', 'personalized'];
+const BOOST_OPTIONS = ['yes', 'no', 'outbid'];
+
+export default function JobDetail({record, table, onSkip, onQualify, onDiscard, onPriority, onCoverLetter, onApplyTemplate}) {
     const title = record.getCellValueAsString(JOB_FIELDS.TITLE);
     const url = record.getCellValueAsString(JOB_FIELDS.URL);
     const description = record.getCellValueAsString(JOB_FIELDS.DESCRIPTION);
@@ -25,8 +30,18 @@ export default function JobDetail({record, table, onQualify, onDiscard, onPriori
     const connectsCost = record.getCellValue(JOB_FIELDS.CONNECTS_COST);
     const discardComment = record.getCellValueAsString(JOB_FIELDS.COMMENTS);
     const searchLabel = record.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL);
+    const proposalViewed = safeGetString(record, JOB_FIELDS.PROPOSAL_VIEWED);
+    const proposalIgnored = safeGetString(record, JOB_FIELDS.PROPOSAL_IGNORED);
+    const coverLetterType = safeGetString(record, JOB_FIELDS.COVER_LETTER_TYPE);
+    const boosted = safeGetString(record, JOB_FIELDS.BOOSTED);
 
     const isActionable = status === STATUSES.NEW_JOBS;
+    const isSubmittedOrEngaged = status === STATUSES.SUBMITTED || status === STATUSES.ENGAGED;
+
+    const updateField = useCallback(async (field, value) => {
+        if (!table.hasPermissionToUpdateRecord(record)) return;
+        await table.updateRecordAsync(record, {[field]: value});
+    }, [table, record]);
 
     return (
         <div className="px-5 py-4">
@@ -46,6 +61,14 @@ export default function JobDetail({record, table, onQualify, onDiscard, onPriori
                             label="Discard"
                             variant="ghost"
                         />
+                        {onSkip && (
+                            <ActionButton
+                                onClick={onSkip}
+                                icon={<SkipForward size={14} />}
+                                label="Skip"
+                                variant="ghost"
+                            />
+                        )}
                     </>
                 )}
 
@@ -162,6 +185,59 @@ export default function JobDetail({record, table, onQualify, onDiscard, onPriori
                     </div>
                 </div>
             )}
+
+            {/* Proposal tracking — visible for Submitted / Engaged */}
+            {isSubmittedOrEngaged && (
+                <div className="border-t border-gray-gray75 dark:border-gray-gray700 pt-4 mt-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-gray400 mb-3">
+                        Proposal Tracking
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                        <ToggleChip
+                            label="Viewed"
+                            active={proposalViewed === 'yes'}
+                            onClick={() => updateField(JOB_FIELDS.PROPOSAL_VIEWED, proposalViewed === 'yes' ? 'no' : 'yes')}
+                        />
+                        <ToggleChip
+                            label="Ignored"
+                            active={proposalIgnored === 'yes'}
+                            onClick={() => updateField(JOB_FIELDS.PROPOSAL_IGNORED, proposalIgnored === 'yes' ? 'no' : 'yes')}
+                        />
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-gray400 dark:text-gray-gray500">Letter</span>
+                            {COVER_LETTER_TYPES.map(t => (
+                                <button
+                                    key={t}
+                                    onClick={() => updateField(JOB_FIELDS.COVER_LETTER_TYPE, t)}
+                                    className={`text-xs px-2 py-0.5 rounded-md transition-colors ${
+                                        coverLetterType === t
+                                            ? 'bg-gray-gray100 dark:bg-gray-gray700 text-gray-gray700 dark:text-gray-gray200 font-medium'
+                                            : 'text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'
+                                    }`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-gray400 dark:text-gray-gray500">Boosted</span>
+                            {BOOST_OPTIONS.map(b => (
+                                <button
+                                    key={b}
+                                    onClick={() => updateField(JOB_FIELDS.BOOSTED, b)}
+                                    className={`text-xs px-2 py-0.5 rounded-md transition-colors ${
+                                        boosted === b
+                                            ? 'bg-gray-gray100 dark:bg-gray-gray700 text-gray-gray700 dark:text-gray-gray200 font-medium'
+                                            : 'text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'
+                                    }`}
+                                >
+                                    {b}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -194,6 +270,21 @@ function StatusBadge({status}) {
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colorMap[status] || 'bg-gray-gray100 text-gray-gray500'}`}>
             {status}
         </span>
+    );
+}
+
+function ToggleChip({label, active, onClick}) {
+    return (
+        <button
+            onClick={onClick}
+            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${
+                active
+                    ? 'bg-blue-blueLight2 text-blue-blueDark1 dark:bg-blue-blue/20 dark:text-blue-blueLight1'
+                    : 'bg-gray-gray50 dark:bg-gray-gray800 text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'
+            }`}
+        >
+            {label}
+        </button>
     );
 }
 

@@ -2,8 +2,12 @@ import {useState, useMemo, useCallback} from 'react';
 import {CaretDown, CaretRight, Check, X, PencilLine, ArrowSquareOut, ArrowRight} from '@phosphor-icons/react';
 import {JOB_FIELDS, STATUSES, PIPELINE_STAGES, PRIORITIES} from '../lib/fields';
 import {formatBudget, formatTimeAgo} from '../lib/hooks';
+import {safeGetString} from '../lib/safe';
 import CoverLetterModal from './CoverLetterModal';
 import TemplateQuickPicker from './TemplateQuickPicker';
+
+const COVER_LETTER_TYPES = ['template', 'personalized'];
+const BOOST_OPTIONS = ['yes', 'no', 'outbid'];
 
 const STAGE_DOT = {
     'Qualified': 'bg-green-green',
@@ -181,6 +185,7 @@ export default function Pipeline({table, records}) {
                 <ModalOverlay onClose={() => setSelectedId(null)}>
                     <PipelineJobDetail
                         record={selectedRecord}
+                        table={table}
                         onClose={() => setSelectedId(null)}
                         onMove={(stage) => requestMove(selectedRecord, stage)}
                         onDiscard={() => handleDiscardRequest(selectedRecord)}
@@ -314,7 +319,7 @@ function PipelineRow({record, selected, onClick}) {
     );
 }
 
-function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCoverLetter, onApplyTemplate}) {
+function PipelineJobDetail({record, table, onClose, onMove, onDiscard, onPriority, onCoverLetter, onApplyTemplate}) {
     const title = record.getCellValueAsString(JOB_FIELDS.TITLE);
     const url = record.getCellValueAsString(JOB_FIELDS.URL);
     const description = record.getCellValueAsString(JOB_FIELDS.DESCRIPTION);
@@ -336,6 +341,17 @@ function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCo
     const connectsCost = record.getCellValue(JOB_FIELDS.CONNECTS_COST);
     const discardComment = record.getCellValueAsString(JOB_FIELDS.COMMENTS);
     const searchLabel = record.getCellValueAsString(JOB_FIELDS.SEARCH_LABEL);
+    const proposalViewed = safeGetString(record, JOB_FIELDS.PROPOSAL_VIEWED);
+    const proposalIgnored = safeGetString(record, JOB_FIELDS.PROPOSAL_IGNORED);
+    const coverLetterType = safeGetString(record, JOB_FIELDS.COVER_LETTER_TYPE);
+    const boosted = safeGetString(record, JOB_FIELDS.BOOSTED);
+
+    const isSubmittedOrEngaged = status === STATUSES.SUBMITTED || status === STATUSES.ENGAGED;
+
+    const updateField = useCallback(async (field, value) => {
+        if (!table || !table.hasPermissionToUpdateRecord(record)) return;
+        await table.updateRecordAsync(record, {[field]: value});
+    }, [table, record]);
 
     const nextStages = STAGE_ORDER.filter(s => s !== status && s !== 'Discarded');
 
@@ -461,7 +477,38 @@ function PipelineJobDetail({record, onClose, onMove, onDiscard, onPriority, onCo
                     <div className="text-xs text-gray-gray600 dark:text-gray-gray300 whitespace-pre-wrap">{coverLetter}</div>
                 </div>
             )}
+
+            {/* Proposal tracking */}
+            {isSubmittedOrEngaged && (
+                <div className="border-t border-gray-gray75 dark:border-gray-gray700 pt-4 mt-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-gray400 mb-3">Proposal Tracking</h3>
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                        <ToggleChip label="Viewed" active={proposalViewed === 'yes'} onClick={() => updateField(JOB_FIELDS.PROPOSAL_VIEWED, proposalViewed === 'yes' ? 'no' : 'yes')} />
+                        <ToggleChip label="Ignored" active={proposalIgnored === 'yes'} onClick={() => updateField(JOB_FIELDS.PROPOSAL_IGNORED, proposalIgnored === 'yes' ? 'no' : 'yes')} />
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-gray400 dark:text-gray-gray500">Letter</span>
+                            {COVER_LETTER_TYPES.map(t => (
+                                <button key={t} onClick={() => updateField(JOB_FIELDS.COVER_LETTER_TYPE, t)} className={`text-xs px-2 py-0.5 rounded-md transition-colors ${coverLetterType === t ? 'bg-gray-gray100 dark:bg-gray-gray700 text-gray-gray700 dark:text-gray-gray200 font-medium' : 'text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'}`}>{t}</button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-gray400 dark:text-gray-gray500">Boosted</span>
+                            {BOOST_OPTIONS.map(b => (
+                                <button key={b} onClick={() => updateField(JOB_FIELDS.BOOSTED, b)} className={`text-xs px-2 py-0.5 rounded-md transition-colors ${boosted === b ? 'bg-gray-gray100 dark:bg-gray-gray700 text-gray-gray700 dark:text-gray-gray200 font-medium' : 'text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'}`}>{b}</button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
+    );
+}
+
+function ToggleChip({label, active, onClick}) {
+    return (
+        <button onClick={onClick} className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${active ? 'bg-blue-blueLight2 text-blue-blueDark1 dark:bg-blue-blue/20 dark:text-blue-blueLight1' : 'bg-gray-gray50 dark:bg-gray-gray800 text-gray-gray400 hover:text-gray-gray600 dark:hover:text-gray-gray300'}`}>
+            {label}
+        </button>
     );
 }
 

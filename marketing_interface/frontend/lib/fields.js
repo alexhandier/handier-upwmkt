@@ -32,6 +32,10 @@ export const JOB_FIELDS = {
     FETCHED_AT: 'Fetched At',
     CONNECTS_COST: 'Connects Cost',
     COMMENTS: 'Comments',
+    PROPOSAL_VIEWED: 'Proposal Viewed',
+    PROPOSAL_IGNORED: 'Proposal Ignored',
+    COVER_LETTER_TYPE: 'Cover Letter Type',
+    BOOSTED: 'Boosted',
 };
 
 export const STATUSES = {

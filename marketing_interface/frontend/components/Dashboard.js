@@ -1,5 +1,6 @@
 import {useState, useMemo} from 'react';
 import {JOB_FIELDS, STATUSES} from '../lib/fields';
+import {safeGetString} from '../lib/safe';
 
 const CONNECT_RATE = 0.15;
 
@@ -49,11 +50,28 @@ export default function Dashboard({records}) {
             if (connects) totalConnects += Number(connects);
         }
 
+        let proposals = 0, viewed = 0, ignored = 0, boostedCount = 0, templateCount = 0, personalizedCount = 0;
+        for (const r of filtered) {
+            const st = r.getCellValueAsString(JOB_FIELDS.STATUS);
+            if (st === STATUSES.SUBMITTED || st === STATUSES.ENGAGED) {
+                proposals++;
+                if (safeGetString(r, JOB_FIELDS.PROPOSAL_VIEWED) === 'yes') viewed++;
+                if (safeGetString(r, JOB_FIELDS.PROPOSAL_IGNORED) === 'yes') ignored++;
+                const b = safeGetString(r, JOB_FIELDS.BOOSTED);
+                if (b === 'yes') boostedCount++;
+                const lt = safeGetString(r, JOB_FIELDS.COVER_LETTER_TYPE);
+                if (lt === 'template') templateCount++;
+                if (lt === 'personalized') personalizedCount++;
+            }
+        }
+
         const total = filtered.length;
         const qualified = counts[STATUSES.QUALIFIED] + counts[STATUSES.SEND] + counts[STATUSES.SUBMITTED] + counts[STATUSES.ENGAGED];
         const discarded = counts[STATUSES.DISCARDED];
         const qualifyRate = total > 0 ? ((qualified / total) * 100) : 0;
         const engageRate = qualified > 0 ? ((counts[STATUSES.ENGAGED] / qualified) * 100) : 0;
+        const viewRate = proposals > 0 ? ((viewed / proposals) * 100) : 0;
+        const ignoreRate = proposals > 0 ? ((ignored / proposals) * 100) : 0;
 
         // Activity grid: daily counts for the grid period
         const gridDays = rangeDef.days || 90;
@@ -76,7 +94,7 @@ export default function Dashboard({records}) {
         }
         const maxCount = Math.max(1, ...days.map(d => d.count));
 
-        return {total, qualified, discarded, counts, totalConnects, qualifyRate, engageRate, days, maxCount};
+        return {total, qualified, discarded, counts, totalConnects, qualifyRate, engageRate, days, maxCount, proposals, viewed, ignored, boostedCount, templateCount, personalizedCount, viewRate, ignoreRate};
     }, [records, range]);
 
     if (!data) {
@@ -87,7 +105,7 @@ export default function Dashboard({records}) {
         );
     }
 
-    const {total, qualified, discarded, counts, totalConnects, qualifyRate, engageRate, days, maxCount} = data;
+    const {total, qualified, discarded, counts, totalConnects, qualifyRate, engageRate, days, maxCount, proposals, viewed, ignored, boostedCount, templateCount, personalizedCount, viewRate, ignoreRate} = data;
 
     return (
         <div className="h-full overflow-y-auto">
@@ -127,6 +145,21 @@ export default function Dashboard({records}) {
                     <Stat value={totalConnects} label="connects" />
                     <Stat value={`$${(totalConnects * CONNECT_RATE).toFixed(0)}`} label="spent" />
                 </div>
+
+                {/* Proposal stats */}
+                {proposals > 0 && (
+                    <div className="flex items-baseline gap-6 mb-6">
+                        <Stat value={proposals} label="proposals" />
+                        <Stat value={viewed} label="viewed" />
+                        <Stat value={`${viewRate.toFixed(0)}%`} label="view rate" />
+                        <Stat value={ignored} label="ignored" />
+                        <Stat value={`${ignoreRate.toFixed(0)}%`} label="ignore rate" dim />
+                        <div className="w-px h-5 bg-gray-gray100 dark:bg-gray-gray700" />
+                        <Stat value={boostedCount} label="boosted" />
+                        <Stat value={templateCount} label="template" />
+                        <Stat value={personalizedCount} label="personalized" />
+                    </div>
+                )}
 
                 {/* Activity grid — GitHub style */}
                 <div>

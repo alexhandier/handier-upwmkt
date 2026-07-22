@@ -56,7 +56,7 @@ const FILTER_MINER_NAME = process.argv[2] || null;
 
 // --- Hardcoded rules (Stage 0) ---
 const RULES = {
-  maxApplicants: 50,
+  maxApplicants: 15,
   maxAgeDays: 14,
   minHourlyRate: 30,
   minFixedBudget: 50,
@@ -488,12 +488,12 @@ async function runBatch<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<
   return results;
 }
 
-async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Set<string>) {
+async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Set<string>): Promise<{ passed: number }> {
   console.log(`\n  [${miner.name}] search="${miner.searchExpression}" pages=${miner.maxPages}`);
 
   if (!miner.superficialPrompt) {
     console.log("    SKIP: no superficial prompt linked");
-    return 0;
+    return { passed: 0 };
   }
 
   // Fetch
@@ -503,7 +503,7 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
   for (const j of newJobs) existingIds.add(j.id);
   console.log(`    Fetched ${jobs.length}, new: ${newJobs.length}`);
 
-  if (newJobs.length === 0) return 0;
+  if (newJobs.length === 0) return { passed: 0 };
 
   // Stage 0: Rules (instant, no concurrency needed)
   const afterRules: any[] = [];
@@ -581,7 +581,7 @@ async function runMiner(miner: MinerConfig, accessToken: string, existingIds: Se
   });
 
   console.log(`    Results: rules=-${rejRules} superficial=-${rejSuperficial} deep=-${rejDeep} passed=${passing.length}`);
-  return passing.length;
+  return { passed: passing.length };
 }
 
 // --- Token management with auto-refresh ---
@@ -707,7 +707,8 @@ async function main() {
   // Run miners sequentially (shared existingIds prevents cross-miner dupes)
   let totalPassed = 0;
   for (const miner of dueMiners) {
-    totalPassed += await runMiner(miner, accessToken, existingIds);
+    const result = await runMiner(miner, accessToken, existingIds);
+    totalPassed += result.passed;
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

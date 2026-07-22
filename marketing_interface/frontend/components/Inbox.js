@@ -1,6 +1,6 @@
 import {useState, useMemo, useCallback, useRef} from 'react';
 import {useGlobalConfig} from '@airtable/blocks/interface/ui';
-import {Check, X, CaretDown, Prohibit, MagnifyingGlass} from '@phosphor-icons/react';
+import {Check, X, CaretDown, Prohibit, MagnifyingGlass, SkipForward} from '@phosphor-icons/react';
 import {JOB_FIELDS, STATUSES, PRIORITIES} from '../lib/fields';
 import {formatBudget, formatTimeAgo} from '../lib/hooks';
 import JobDetail from './JobDetail';
@@ -80,6 +80,15 @@ export default function Inbox({table, records}) {
         setSelectedId(recordId);
         markAsRead(recordId);
     }, [markAsRead]);
+
+    const handleSkip = useCallback(() => {
+        if (!selectedId || filteredJobs.length === 0) return;
+        const idx = filteredJobs.findIndex(r => r.id === selectedId);
+        const nextIdx = idx + 1 < filteredJobs.length ? idx + 1 : 0;
+        const nextId = filteredJobs[nextIdx].id;
+        setSelectedId(nextId);
+        markAsRead(nextId);
+    }, [selectedId, filteredJobs, markAsRead]);
 
     // Qualify action
     const handleQualify = useCallback(async (record) => {
@@ -256,6 +265,7 @@ export default function Inbox({table, records}) {
                     <JobDetail
                         record={selectedRecord}
                         table={table}
+                        onSkip={handleSkip}
                         onQualify={() => handleQualify(selectedRecord)}
                         onDiscard={() => handleDiscardRequest(selectedRecord)}
                         onPriority={(p) => handlePriority(selectedRecord, p)}

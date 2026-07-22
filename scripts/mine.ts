@@ -259,10 +259,10 @@ async function fetchJobs(accessToken: string, searchExpression: string, maxPages
 
   const firstSearch: any = firstJson.data?.marketplaceJobPostingsSearch;
   if (!firstSearch) return allJobs;
-  for (const edge of firstSearch.edges) { if (edge?.node) allJobs.push(edge.node); }
-  console.log(` ${firstSearch.edges.length} jobs`);
+  for (const edge of (firstSearch.edges || [])) { if (edge?.node) allJobs.push(edge.node); }
+  console.log(` ${firstSearch.edges?.length || 0} jobs`);
 
-  if (!firstSearch.pageInfo.hasNextPage || maxPages <= 1) return allJobs;
+  if (!firstSearch.pageInfo?.hasNextPage || maxPages <= 1) return allJobs;
   cursor = firstSearch.pageInfo.endCursor;
 
   // Remaining pages sequentially (need cursor from previous)
@@ -292,10 +292,10 @@ async function fetchJobs(accessToken: string, searchExpression: string, maxPages
     const search: any = json.data?.marketplaceJobPostingsSearch;
     if (!search) break;
 
-    for (const edge of search.edges) { if (edge?.node) allJobs.push(edge.node); }
-    console.log(` ${search.edges.length} jobs`);
+    for (const edge of (search.edges || [])) { if (edge?.node) allJobs.push(edge.node); }
+    console.log(` ${search.edges?.length || 0} jobs`);
 
-    if (!search.pageInfo.hasNextPage) break;
+    if (!search.pageInfo?.hasNextPage) break;
     cursor = search.pageInfo.endCursor;
   }
   return allJobs;
